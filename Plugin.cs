@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Configuration;
 using System.Net.Mail;
-
+using System.Linq;
+using System.Collections.Generic;
 // Microsoft Dynamics CRM namespace(s)
 using Microsoft.Xrm.Sdk;
 using Microsoft.Crm.Sdk.Messages;
@@ -129,13 +127,22 @@ namespace ASG.Crm.Sdk.Web
                             if (!GetOwnerInfo((Guid)entity["accountid"], wService, ref newCSREmail, ref newName, true, refNewOwner.Id)) return;
                             // Get the Acct Name
                             string strAcctName = GetAcctName((Guid)entity["accountid"], wService);
+
+                            // Determine if we neeed to query the db to get CustomerTypeCode
+                            string CustomerTypeCodeText = "";
+                            if (!entity.Contains("customertypecode"))
+                                CustomerTypeCodeText = GetAccountToBeUpdated(entity.Id);
+                            else
+                            {
+                                CustomerTypeCodeText = (entity.FormattedValues["customertypecode"]).ToString();
+                            }
                             // Send an email out if ownership changed
                             if ((newCSREmail != origCSREmail) && (!string.IsNullOrEmpty(strAcctName)))
                             {
                                 string strMsg = "Info: The account '" + strAcctName + "' has been re-assigned to " +
                                     newName + " from " + origName + ".\n\n" +
                                     "You may view this account at: <" + Properties.Settings.Default.AcctUrl + "{" + ((Guid)entity["accountid"]).ToString() + "}>";
-                                SendMail(origCSREmail, newCSREmail, "CRM Account Ownership change", strMsg);
+                                SendMail(origCSREmail, newCSREmail, "CRM Account Ownership change (" + CustomerTypeCodeText + ")", strMsg);
                             }
 
                         }
@@ -149,6 +156,22 @@ namespace ASG.Crm.Sdk.Web
                         return;
                 }
             }
+        }
+        
+        // Return the Customer Category text for existing quotes only (new quotes will carry the code through the entity reference)
+        public string GetAccountToBeUpdated(Guid guidAccountId)
+        {
+            //get the Quote to be canceled in same Opportunity, exclude the wonQuote
+            myServiceContext context = new myServiceContext(wService);  //This comes from GeneratedCodeWithContext.cs
+            IQueryable<Account> dbAccount = from x in context.AccountSet
+                                    orderby x.CreatedOn descending
+                                    where x.AccountId == guidAccountId
+                                    select x;
+
+            if (dbAccount.ToList().Count > 0)
+                return ((Account)dbAccount).FormattedValues["CustomerTypeCode"].ToString();
+            else
+                return null;
         }
 
         public bool SendMail(string To, string CC, string Subject, string Message)
@@ -169,7 +192,7 @@ namespace ASG.Crm.Sdk.Web
                 //MailAddress maCC2 = new MailAddress("development@virtual.com");
                 MailMessage message = new MailMessage(maFrom, maTo);
                 message.CC.Add(maCC);
-                message.Bcc.Add("psosnowski@virtual.com");
+                message.Bcc.Add("development@virtual.com");
                 message.Subject = strSubject;
                 message.Body = strBody;
                 message.IsBodyHtml = false;
