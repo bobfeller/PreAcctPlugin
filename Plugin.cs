@@ -126,7 +126,8 @@ namespace ASG.Crm.Sdk.Web
                             EntityReference refNewOwner = (EntityReference)entity["ownerid"];
                             if (!GetOwnerInfo((Guid)entity["accountid"], wService, ref newCSREmail, ref newName, true, refNewOwner.Id)) return;
                             // Get the Acct Name
-                            string strAcctName = GetAcctName((Guid)entity["accountid"], wService);
+                            string strAcctNumber = "";
+                            string strAcctName = GetAcctName((Guid)entity["accountid"], ref strAcctNumber, wService);
 
                             // Determine if we neeed to query the db to get CustomerTypeCode
                             string CustomerTypeCodeText = "";
@@ -137,10 +138,12 @@ namespace ASG.Crm.Sdk.Web
                                 CustomerTypeCodeText = (entity.FormattedValues["customertypecode"]).ToString();
                             }
                             // Send an email out if ownership changed
-                            if ((newCSREmail != origCSREmail) && (!string.IsNullOrEmpty(strAcctName)))
+                            if ((newCSREmail != origCSREmail) && (!string.IsNullOrEmpty(strAcctName)) && (CustomerTypeCodeText.Contains("Customer")))
                             {
                                 string strMsg = "Info: The account '" + strAcctName + "' has been re-assigned to " +
                                     newName + " from " + origName + ".\n\n" +
+                                    "Acccount Number: " + strAcctNumber + "\n" +
+                                    "Customer Type Code: " + CustomerTypeCodeText + "\n\n" +
                                     "You may view this account at: <" + Properties.Settings.Default.AcctUrl + "{" + ((Guid)entity["accountid"]).ToString() + "}>";
                                 SendMail(origCSREmail, newCSREmail, "CRM Account Ownership change (" + CustomerTypeCodeText + ")", strMsg);
                             }
@@ -222,7 +225,7 @@ namespace ASG.Crm.Sdk.Web
         }
 
         // This method will look up a Account based on the account id and return the name
-        public static string GetAcctName(Guid accountid, IOrganizationService service)
+        public static string GetAcctName(Guid accountid, ref string strAcctNumber, IOrganizationService service)
         {
             try
             {
@@ -232,9 +235,9 @@ namespace ASG.Crm.Sdk.Web
 
                 query.EntityName = "account";
 
-                // Create a set of columns to return.
+                // Create a set of columns to retur
                 // Create a ColumnSet and set attributes we want to retrieve
-                ColumnSet cols = new ColumnSet(new string[] { "name" });
+                ColumnSet cols = new ColumnSet(new string[] { "name", "accountnumber" });
 
                 // Create the ConditionExpressions.
                 ConditionExpression condition = new ConditionExpression();
@@ -256,6 +259,7 @@ namespace ASG.Crm.Sdk.Web
                 if (retrieved.Entities.Count == 1)
                 {
                     Account acct = (Account)retrieved.Entities[0];
+                    strAcctNumber = acct.AccountNumber;
                     return acct.Name.ToString();
                 }
                 return string.Empty;
@@ -483,7 +487,6 @@ namespace ASG.Crm.Sdk.Web
             {
                 throw new InvalidPluginExecutionException(ex.Message);
             }
-            return true;
         }
         public static string GetCSREmail(Guid systemuserId, IOrganizationService wService)
         {
