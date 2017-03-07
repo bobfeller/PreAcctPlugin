@@ -164,7 +164,6 @@ namespace ASG.Crm.Sdk.Web
             //get the Quote to be canceled in same Opportunity, exclude the wonQuote
             myServiceContext context = new myServiceContext(wService);  //This comes from GeneratedCodeWithContext.cs
             IQueryable<Account> dbAccount = from x in context.AccountSet
-                                    orderby x.CreatedOn descending
                                     where x.AccountId == guidAccountId
                                     select x;
 
