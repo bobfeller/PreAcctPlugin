@@ -18,6 +18,9 @@ namespace ASG.Crm.Sdk.Web
         /// </summary>
         public void Execute(IServiceProvider serviceProvider)
         {
+            List<Account> AccountToBeUpdated = new List<Account>();
+
+
             //throw new InvalidPluginExecutionException("IN PRE");
             // Obtain the execution context from the service provider.
             IPluginExecutionContext context = (IPluginExecutionContext)
@@ -130,20 +133,24 @@ namespace ASG.Crm.Sdk.Web
                             string strAcctName = GetAcctName((Guid)entity["accountid"], ref strAcctNumber, wService);
 
                             // Determine if we neeed to query the db to get CustomerTypeCode
+                            List<Account> GetAccount = new List<Account>(); 
                             string CustomerTypeCodeText = "";
                             if (!entity.Contains("customertypecode"))
-                                CustomerTypeCodeText = GetAccountToBeUpdated(entity.Id);
+                            {
+                                GetAccount = GetAccountToBeUpdated(entity.Id);
+                                CustomerTypeCodeText = GetAccount[0].FormattedValues["customertypecode"].ToString();
+                            }
                             else
                             {
-                                CustomerTypeCodeText = (entity.FormattedValues["customertypecode"]).ToString();
+                                CustomerTypeCodeText = (entity.FormattedValues["customertypecode"].ToString());
                             }
                             // Send an email out if ownership changed
-                            if ((newCSREmail != origCSREmail) && (!string.IsNullOrEmpty(strAcctName)) && (CustomerTypeCodeText.Contains("Customer")))
+                            if ((newCSREmail != origCSREmail) && (!string.IsNullOrEmpty(strAcctName)))
                             {
-                                string strMsg = "Info: The account '" + strAcctName + "' has been re-assigned to " +
+                                string strMsg = "The account '" + strAcctName + "' has been re-assigned to " +
                                     newName + " from " + origName + ".\n\n" +
-                                    "Acccount Number: " + strAcctNumber + "\n" +
-                                    "Customer Type Code: " + CustomerTypeCodeText + "\n\n" +
+                                    "Customer ID: " + strAcctNumber + "\n" +
+                                    "Relationship Type: " + CustomerTypeCodeText + "\n\n" +
                                     "You may view this account at: <" + Properties.Settings.Default.AcctUrl + "{" + ((Guid)entity["accountid"]).ToString() + "}>";
                                 SendMail(origCSREmail, newCSREmail, "CRM Account Ownership change (" + CustomerTypeCodeText + ")", strMsg);
                             }
@@ -162,19 +169,37 @@ namespace ASG.Crm.Sdk.Web
         }
         
         // Return the Customer Category text for existing quotes only (new quotes will carry the code through the entity reference)
-        public string GetAccountToBeUpdated(Guid guidAccountId)
+        public List<Account> GetAccountToBeUpdated(Guid guidAccountId)
         {
             //get the Quote to be canceled in same Opportunity, exclude the wonQuote
             myServiceContext context = new myServiceContext(wService);  //This comes from GeneratedCodeWithContext.cs
-            IQueryable<Account> dbAccount = from x in context.AccountSet
+            var dbAccount = from x in context.AccountSet
                                     where x.AccountId == guidAccountId
                                     select x;
 
             if (dbAccount.ToList().Count > 0)
-                return ((Account)dbAccount).FormattedValues["CustomerTypeCode"].ToString();
+                return dbAccount.ToList<Account>();
             else
                 return null;
         }
+
+        // Return all of the Quote from related Opportunity to be Canceled/Lost
+        public List<Quote> GetQuoteToBeCanceled(Guid guidOpportunityId)
+        {
+            Quote quote = new Quote();
+            //get the Quote to be canceled in same Opportunity, exclude the wonQuote
+            myServiceContext context = new myServiceContext(wService);  //This comes from GeneratedCodeWithContext.cs
+            var quoteToBeCanceled = from x in context.QuoteSet
+                                    orderby x.CreatedOn descending
+                                    where x.OpportunityId.Id == guidOpportunityId
+                                    select x;
+
+            if (quoteToBeCanceled.ToList().Count > 0)
+                return quoteToBeCanceled.ToList<Quote>();
+            else
+                return null;
+        }
+
 
         public bool SendMail(string To, string CC, string Subject, string Message)
         {
@@ -193,6 +218,7 @@ namespace ASG.Crm.Sdk.Web
                 MailAddress maCC = new MailAddress(CC);
                 //MailAddress maCC2 = new MailAddress("development@virtual.com");
                 MailMessage message = new MailMessage(maFrom, maTo);
+                message.To.Add(maTo);
                 message.CC.Add(maCC);
                 message.Bcc.Add("development@virtual.com");
                 message.Subject = strSubject;
